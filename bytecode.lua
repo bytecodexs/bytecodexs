@@ -1,20 +1,3 @@
---[[
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣸⣇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢰⣿⣿⡆⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⣿⣿⣿⣿⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢿⣿⣿⣿⣿⣿⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣷⣤⣙⢻⣿⣿⣿⣿⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⢀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⢠⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⡄⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⢠⣿⣿⣿⣿⣿⡿⠛⠛⠿⣿⣿⣿⣿⣿⡄⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⢠⣿⣿⣿⣿⣿⠏⠀⠀⠀⠀⠙⣿⣿⣿⣿⣿⡄⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⣰⣿⣿⣿⣿⣿⣿⠀⠀⠀⠀⠀⠀⢿⣿⣿⣿⣿⠿⣆⠀⠀⠀⠀
-⠀⠀⠀⣴⣿⣿⣿⣿⣿⣿⣿⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣷⣦⡀⠀⠀⠀
-⠀⢀⣾⣿⣿⠿⠟⠛⠋⠉⠉⠀⠀⠀⠀⠀⠀⠉⠉⠙⠛⠻⠿⣿⣿⣷⡀⠀
-⣠⠟⠋⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠙⠻⣄
-            Develop by El
-]]
-
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -656,6 +639,12 @@ local function runCycle(myGen)
     local connPull, connCatch
     if R.PullState then
         connPull = R.PullState.OnClientEvent:Connect(function(payload)
+            print("[FAM DEBUG] PullState payload:", payload)
+            if type(payload) == "table" then
+                for k, v in pairs(payload) do
+                    print("[FAM DEBUG]   ", k, "=", v)
+                end
+            end
             if type(payload) ~= "table" then return end
             if payload.sessionId and payload.sessionId ~= sid then return end
             if payload.type == "progress" then
@@ -678,18 +667,24 @@ local function runCycle(myGen)
     end
     fire(R.StartPulling)
     playFishAnim("Pulling", true)
-    pcall(function()
-        R.PullInput:InvokeServer(sid, "begin")
+    local okBegin, resBegin = pcall(function()
+        return R.PullInput:InvokeServer(sid, "begin")
     end)
+    print("[FAM DEBUG] begin ok=", okBegin, "result=", resBegin)
     local ppt = tonumber(bite.progressPerTap) or 0.06
     local delay = state.speedFishingDelay or math.clamp(0.055 + (ppt < 0.05 and 0.02 or 0), 0.05, 0.12)
     local deadline = os.clock() + (tonumber(bite.timeLimit) or 15) + 2
+    local tapCount = 0
     while os.clock() < deadline and not resolved and state.v2 and not state.stop and not orphaned() do
         pcall(function()
             local mult = state.tapMultiplier or 1
             for i = 1, mult do
                 if resolved or state.stop or not state.v2 or orphaned() then break end
-                R.PullInput:InvokeServer(sid, "tap")
+                local okTap, resTap = pcall(function()
+                    return R.PullInput:InvokeServer(sid, "tap")
+                end)
+                tapCount += 1
+                print("[FAM DEBUG] tap #" .. tapCount, "ok=", okTap, "result=", resTap, "progress=", state.progress)
             end
         end)
         task.wait(delay)
