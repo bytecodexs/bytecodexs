@@ -12,7 +12,7 @@
 ## Loader
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/bytecodexs/bytecode/main/byteloader.luau"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/bytecodexs/bytecodexs/main/byteloader.luau"))()
 ```
 
 ## Why ByteCode?
