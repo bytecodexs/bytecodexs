@@ -293,7 +293,7 @@ local function publicStatus(raw)
     if low == "idle" then return "Idle"
     elseif low == "cast" then return "Casting"
     elseif low == "bite" then return "Waiting for bite"
-    elseif low:find("bite fail") or low:find("bite:") then return "Waiting for bite"
+    elseif low:find("bite fail") or low:find("bite:") then return "Waiting"
     elseif low == "pull" then return "Reeling"
     elseif low:find("^caught #") then
         local n = raw:match("#(%d+)")
@@ -709,6 +709,7 @@ local function runCycle(myGen)
     end
     fire(R.StartPulling)
     playFishAnim("Pulling", true)
+    task.wait(0.4) -- beri server waktu memproses StartPulling sebelum kirim begin
     local okBegin, resBegin = pcall(function()
         return R.PullInput:InvokeServer(sid, "begin")
     end)
@@ -718,18 +719,18 @@ local function runCycle(myGen)
     local delay = state.speedFishingDelay or math.clamp(0.055 + (ppt < 0.05 and 0.02 or 0), 0.05, 0.12)
     local deadline = os.clock() + (tonumber(bite.timeLimit) or 15) + 2
     local tapCount = 0
-    local beginRetries = 0
     while os.clock() < deadline and not resolved and state.v2 and not state.stop and not orphaned() do
         if tooEarly then
-            tooEarly = false
-            beginRetries += 1
-            local waitFor = 0.5 + (beginRetries * 0.3)
-            dbg("[FAM DEBUG] too_early detected, retry begin #" .. beginRetries .. " after " .. waitFor .. "s")
-            task.wait(waitFor)
-            pcall(function()
-                R.PullInput:InvokeServer(sid, "begin")
-            end)
-            task.wait(waitFor)
+            -- sid ini sudah dianggap dead oleh server (tidak lagi broadcast PullState untuk
+            -- sid ini walau kita retry begin/tap). Jangan retry di sid lama; keluar dan biarkan
+            -- cycle baru minta bite baru (sid baru) dari awal.
+            dbg("[FAM DEBUG] too_early -> abandoning sid, will restart full cycle")
+            if connPull then connPull:Disconnect() end
+            if connCatch then connCatch:Disconnect() end
+            stopAllFishAnims()
+            state.status = "bite: too_early (retry)"
+            task.wait(0.3)
+            return false
         end
         pcall(function()
             local mult = state.tapMultiplier or 1
@@ -2518,7 +2519,7 @@ do
     _loadCfg()
 
     Window:Tag({
-        Title = "FAM v0000000",
+        Title = "FAM v1.1.5",
         Icon = "solar:crown-line-bold",
         Color = Color3.fromRGB(0, 0, 0),
         Border = true,
