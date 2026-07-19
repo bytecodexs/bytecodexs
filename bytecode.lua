@@ -83,6 +83,36 @@ dbg("[FAM DEBUG] R.FishCaught path:", R.FishCaught and R.FishCaught:GetFullName(
 dbg("[FAM DEBUG] reward.RE FishingPullState exists:", reward and reward.RE and reward.RE:FindFirstChild("FishingPullState") ~= nil)
 dbg("[FAM DEBUG] W FishingPullState exists:", W:FindFirstChild("FishingPullState") ~= nil)
 
+if reward and reward.RE then
+    dbg("[FAM DEBUG] --- reward.RE children ---")
+    for _, child in ipairs(reward.RE:GetChildren()) do
+        dbg("[FAM DEBUG] RE child:", child.Name, child.ClassName)
+    end
+end
+if reward and reward.RF then
+    dbg("[FAM DEBUG] --- reward.RF children ---")
+    for _, child in ipairs(reward.RF:GetChildren()) do
+        dbg("[FAM DEBUG] RF child:", child.Name, child.ClassName)
+    end
+end
+do
+    local replSvc = knitService("FishingReplicationService")
+    if replSvc then
+        if replSvc:FindFirstChild("RE") then
+            dbg("[FAM DEBUG] --- FishingReplicationService.RE children ---")
+            for _, child in ipairs(replSvc.RE:GetChildren()) do
+                dbg("[FAM DEBUG] ReplRE child:", child.Name, child.ClassName)
+            end
+        end
+        if replSvc:FindFirstChild("RF") then
+            dbg("[FAM DEBUG] --- FishingReplicationService.RF children ---")
+            for _, child in ipairs(replSvc.RF:GetChildren()) do
+                dbg("[FAM DEBUG] ReplRF child:", child.Name, child.ClassName)
+            end
+        end
+    end
+end
+
 local BossComm = W:FindFirstChild("BossEventComm") or W:WaitForChild("BossEventComm", 5)
 local Boss = {
     Announce  = BossComm and BossComm:FindFirstChild("BossEventAnnounce"),
@@ -669,11 +699,25 @@ local function runCycle(myGen)
         task.wait(0.35)
         return false
     end
+    -- Capture manual menunjukkan RequestFishBite dipanggil KEDUA kalinya (dengan land yang
+    -- sama) setelah sesi bite pertama didapat, sebelum server benar-benar mengizinkan pulling.
+    -- Tanpa panggilan kedua ini, tap pertama selalu ditolak server dengan reason=too_early.
+    task.wait(0.2)
+    pcall(function()
+        local ok2, res2 = pcall(function()
+            return R.RequestFishBite:InvokeServer(land)
+        end)
+        dbg("[FAM DEBUG] RequestFishBite (2nd call) ok=", ok2, "result=", res2)
+        if ok2 and type(res2) == "table" and type(res2.SessionId) == "string" then
+            bite = res2
+        end
+    end)
     state.status = "pull"
     local resolved, success, catchPayload = false, false, nil
     local sid = bite.SessionId
     local connPull, connCatch
     local tooEarly = false
+    local pullReady = false
     if R.PullState then
         connPull = R.PullState.OnClientEvent:Connect(function(payload)
             dbg("[FAM DEBUG] PullState payload:", payload)
@@ -684,7 +728,10 @@ local function runCycle(myGen)
             end
             if type(payload) ~= "table" then return end
             if payload.sessionId and payload.sessionId ~= sid then return end
-            if payload.type == "progress" then
+            if payload.type == "begin" or payload.type == "started" or payload.type == "ready" then
+                pullReady = true
+            elseif payload.type == "progress" then
+                pullReady = true
                 state.progress = tonumber(payload.progress) or state.progress
             elseif payload.type == "resolved" then
                 if payload.reason == "too_early" then
@@ -709,7 +756,15 @@ local function runCycle(myGen)
     end
     fire(R.StartPulling)
     playFishAnim("Pulling", true)
-    task.wait(0.15) -- jeda kecil agar server memproses StartPulling sebelum tap pertama
+    -- Server yang mengirim sinyal "begin" lewat PullState (bukan kita yang InvokeServer
+    -- "begin"). Tunggu sinyal itu sebelum kirim tap pertama, alih-alih delay buta.
+    do
+        local waitDeadline = os.clock() + 3
+        while not pullReady and not resolved and os.clock() < waitDeadline and state.v2 and not state.stop and not orphaned() do
+            task.wait(0.05)
+        end
+        dbg("[FAM DEBUG] pullReady=", pullReady, "after wait, resolved=", resolved)
+    end
     local ppt = tonumber(bite.progressPerTap) or 0.06
     local delay = state.speedFishingDelay or math.clamp(0.055 + (ppt < 0.05 and 0.02 or 0), 0.05, 0.12)
     local deadline = os.clock() + (tonumber(bite.timeLimit) or 15) + 2
@@ -2514,7 +2569,7 @@ do
     _loadCfg()
 
     Window:Tag({
-        Title = "FAM v32233223",
+        Title = "FAM v1.1.5",
         Icon = "solar:crown-line-bold",
         Color = Color3.fromRGB(0, 0, 0),
         Border = true,
