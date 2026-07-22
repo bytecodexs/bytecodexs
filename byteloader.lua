@@ -18,7 +18,7 @@ repeat
 	task.wait()
 until game:IsLoaded()
 local ByteCode = {}
-ByteCode.Universal = "soon"
+ByteCode.Universal = "https://raw.githubusercontent.com/bytecodexs/bytecodexs/main/src/byteUniversal.lua"
 ByteCode.Games = {}
 local function RegisterGame(placeIds, name, url)
 	for _, placeId in ipairs(placeIds) do
@@ -32,7 +32,7 @@ RegisterGame(
 	{
 	111385005478215,
 	90457367396205
-}, "Fish and Monsters!", "https://raw.githubusercontent.com/bytecodexs/bytecodexs/main/src/bytecode.lua")
+}, "Fish and Monsters!", "https://raw.githubusercontent.com/bytecodexs/bytecodexs/main/src/byteFam.lua")
 function ByteCode.Notify(title, text, duration, icon)
 	pcall(function()
 		game:GetService("StarterGui"):SetCore("SendNotification", {
