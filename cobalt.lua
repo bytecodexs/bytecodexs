@@ -20,9 +20,6 @@
     GitHub: https://github.com/notpoiu/cobalt/                                      
 --]]
 
-
--- ++++++++ WAX BUNDLED DATA BELOW ++++++++ --
-
 -- Will be used later for getting flattened globals
 local ImportGlobals
 
