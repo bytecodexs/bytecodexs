@@ -89,7 +89,7 @@ jobs:
               footer: {
                 text: "ByteGit"
               },
-              timestamp: (now todateiso8601)
+              timestamp: (now | todateiso8601)
             }]
           }')
 
