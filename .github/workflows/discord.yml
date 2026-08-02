@@ -1,4 +1,5 @@
 name: Discord Notify
+
 on:
   push:
     branches: [main]
@@ -6,6 +7,7 @@ on:
 jobs:
   notify:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v3
         with:
@@ -15,35 +17,84 @@ jobs:
         env:
           WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
-          # Strip any hidden whitespace/newlines from the secret
           CLEAN_URL=$(echo "$WEBHOOK_URL" | tr -d '[:space:]')
 
-          echo "URL length: ${#CLEAN_URL}"
-          echo "URL starts with: ${CLEAN_URL:0:30}..."
-
           FILES=$(git diff --name-status HEAD~1 HEAD)
-          ADDED=$(echo "$FILES" | grep '^A' | cut -f2)
-          MODIFIED=$(echo "$FILES" | grep '^M' | cut -f2)
-          REMOVED=$(echo "$FILES" | grep '^D' | cut -f2)
+
+          ADDED=$(echo "$FILES" | grep '^A' | cut -f2 | paste -sd '\n' -)
+          MODIFIED=$(echo "$FILES" | grep '^M' | cut -f2 | paste -sd '\n' -)
+          REMOVED=$(echo "$FILES" | grep '^D' | cut -f2 | paste -sd '\n' -)
 
           MSG="${{ github.event.head_commit.message }}"
+          AUTHOR="${{ github.actor }}"
+          REPO="${{ github.repository }}"
+          SHA="${{ github.sha }}"
+          SHORT_SHA=$(echo "$SHA" | cut -c1-7)
+          BRANCH="${GITHUB_REF#refs/heads/}"
+          COMMIT_URL="https://github.com/$REPO/commit/$SHA"
 
           PAYLOAD=$(jq -n \
             --arg msg "$MSG" \
-            --arg added "$ADDED" \
-            --arg modified "$MODIFIED" \
-            --arg removed "$REMOVED" \
-            '{
-              embeds: [{
-                title: "Commit Pushed",
-                color: 2829617,
-                fields: [
-                  {name: "Commit Message", value: $msg},
-                  {name: "Added", value: ($added | if . == "" then "None" else . end)},
-                  {name: "Modified", value: ($modified | if . == "" then "None" else . end)},
-                  {name: "Removed", value: ($removed | if . == "" then "None" else . end)}
-                ]
-              }]
-            }')
+            --arg author "$AUTHOR" \
+            --arg repo "$REPO" \
+            --arg branch "$BRANCH" \
+            --arg sha "$SHORT_SHA" \
+            --arg url "$COMMIT_URL" \
+            --arg added "${ADDED:-None}" \
+            --arg modified "${MODIFIED:-None}" \
+            --arg removed "${REMOVED:-None}" \
+          '{
+            username: "GitHub Notify",
+            embeds: [{
+              color: 2829617,
+              author: {
+                name: $author,
+                icon_url: ("https://github.com/" + $author + ".png")
+              },
+              title: $msg,
+              url: $url,
+              description: "A new commit has been pushed to the repository.",
+              fields: [
+                {
+                  name: "Repository",
+                  value: $repo,
+                  inline: true
+                },
+                {
+                  name: "Branch",
+                  value: $branch,
+                  inline: true
+                },
+                {
+                  name: "Commit",
+                  value: $sha,
+                  inline: true
+                },
+                {
+                  name: "Added",
+                  value: (if $added == "" then "None" else "```text\n" + $added + "\n```" end),
+                  inline: false
+                },
+                {
+                  name: "Modified",
+                  value: (if $modified == "" then "None" else "```text\n" + $modified + "\n```" end),
+                  inline: false
+                },
+                {
+                  name: "Removed",
+                  value: (if $removed == "" then "None" else "```text\n" + $removed + "\n```" end),
+                  inline: false
+                }
+              ],
+              footer: {
+                text: "GitHub"
+              },
+              timestamp: (now | todateiso8601)
+            }]
+          }')
 
-          curl -H "Content-Type: application/json" -X POST -d "$PAYLOAD" "$CLEAN_URL"
+          curl \
+            -H "Content-Type: application/json" \
+            -X POST \
+            -d "$PAYLOAD" \
+            "$CLEAN_URL"
